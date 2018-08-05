@@ -11,30 +11,66 @@ from scipy.io import wavfile
 def norm_audios(audio_dir):
     audio_files = [x for x in os.listdir(audio_dir) if x.endswith('.wav')]
     for audio in audio_files:
-        os.system('ffmpeg-normalize {} -nt peak -o {}_normalized.wav'.format(
-            audio.split('.')[0], audio.split('.')[0]))
+        singer = audio.split('_STEM')[0]
+        final_dir = os.path.join('NormAudios', singer)
+        if not (os.path.exists(final_dir)):
+            os.makedirs(final_dir)
+        os.system('ffmpeg-normalize {} -nt peak -o {}.wav'.format(
+            os.path.join(audio_dir, audio), os.path.join(final_dir, audio.split('.')[0])))
 
 
-def mix_audios(audio_dir):
-    sounds = [AudioSegment.from_wav(x) for x in os.listdir(
-        audio_dir) if x.endswith('_normalized.wav')]
+def mix_audios(audio_dir, vocals, non_vocals, names=['mixed', 'vocals', 'non_vocals']):
+    sounds = [AudioSegment.from_wav(os.path.join(audio_dir, x)) for x in os.listdir(
+        audio_dir) if x.endswith('.wav')]
+    voices = [AudioSegment.from_wav(os.path.join(audio_dir, x)) for x in os.listdir(
+        audio_dir) if x in vocals]
+    instruments = voices = [AudioSegment.from_wav(os.path.join(audio_dir, x)) for x in os.listdir(
+        audio_dir) if x in non_vocals]
+    print(vocals, non_vocals)
     mixed = None
+    mixv = None
+    mixn = None
     for sound in sounds:
         if mixed is None:
             mixed = sound
         else:
             mixed.overlay(sound)
-    mixed.export('mixed_normalized.wav', format='wav')
+    for sound in voices:
+        if mixv is None:
+            mixv = sound
+        else:
+            mixv.overlay(sound)
+    for sound in instruments:
+        if mixn is None:
+            mixn = sound
+        else:
+            mixn.overlay(sound)
+    mixed.export('{}.wav'.format(os.path.join(
+        audio_dir, names[0])), format='wav')
+    if mixv is not None:
+        voc = os.path.join(audio_dir, 'Vocals')
+        if not (os.path.exists(voc)):
+            os.makedirs(voc)
+        mixv.export('{}.wav'.format(os.path.join(voc, names[1])), format='wav')
+    if mixn is not None:
+        nvoc = os.path.join(audio_dir, 'Non_Vocals')
+        if not (os.path.exists(nvoc)):
+            os.makedirs(nvoc)
+        mixn.export('{}.wav'.format(
+            os.path.join(nvoc, names[2])), format='wav')
 
 
-def prepare_data(audio_dir):
+def prepare_data(audio_dir, yaml_path, norm_dir='NormAudios'):
     norm_audios(audio_dir)
-    mix_audios(audio_dir)
+    stems, vocals, non_vocals = get_audios(yaml_path)
+    singer = stems.split('_STEMS')[0]
+    path = os.path.join(norm_dir, singer)
+    mix_audios(path,  vocals, non_vocals)
     audio_files = [x for x in os.listdir(
-        audio_dir) if x.endswith('_normalized.wav')]
+        path) if x.endswith('.wav')]
     audios_data = list()
     for audio in audio_files:
-        rate, data = wavfile.read(audio)
+        rate, data = wavfile.read(os.path.join(path, audio))
         if rate != 44100:
             data = signal.resample(data, 44100)
         audios_data.append(data)
